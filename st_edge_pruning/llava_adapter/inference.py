@@ -66,6 +66,16 @@ def _prepare_inputs(tokenizer, prompt: str, device: torch.device):
     return input_ids, attention_mask, text_tokens
 
 
+def _metadata_float(sample: EvalSample, *keys: str) -> float | None:
+    """Read optional numeric timing metadata from a dataset sample."""
+
+    for key in keys:
+        value = sample.metadata.get(key)
+        if value is not None:
+            return float(value)
+    return None
+
+
 def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config: Dict[str, Any]) -> Dict[str, Any]:
     """Run one sample and return prediction, token stats, timing, and frames."""
 
@@ -78,6 +88,9 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
         frame_sampling=config["frame_sampling"],
         video_fps=float(config["video_fps"]),
         force_sample=bool(config["force_sample"]),
+        start_time=_metadata_float(sample, "start", "start_time"),
+        end_time=_metadata_float(sample, "end", "end_time"),
+        frame_dir_fps=float(sample.metadata.get("frame_fps", config.get("frame_dir_fps", 3.0))),
     )
     video = image_processor.preprocess(frames, return_tensors="pt")["pixel_values"]
     video = video.to(device=_model_device(model), dtype=_model_dtype(config))

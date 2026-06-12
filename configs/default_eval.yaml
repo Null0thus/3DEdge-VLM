@@ -13,6 +13,8 @@ limit_samples: null
 num_chunks: 1
 chunk_idx: 0
 chunk_strategy: round_robin
+missing_video_policy: skip
+frame_dir_fps: 3
 
 # Video loading and generation.
 num_frames: 16

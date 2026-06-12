@@ -48,6 +48,14 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
     return records
 
 
+def _read_optional_jsonl(path: Path) -> List[Dict[str, Any]]:
+    """Read an optional JSONL file, returning an empty list when absent."""
+
+    if not path.exists():
+        return []
+    return _read_jsonl(path)
+
+
 def _write_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
     """Write dictionaries as UTF-8 JSONL."""
 
@@ -79,13 +87,22 @@ def _avg(records: List[Dict[str, Any]], key: str):
     return sum(values) / len(values)
 
 
-def _write_summary(path: Path, predictions: List[Dict[str, Any]], token_stats: List[Dict[str, Any]], timings: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _write_summary(
+    path: Path,
+    predictions: List[Dict[str, Any]],
+    token_stats: List[Dict[str, Any]],
+    timings: List[Dict[str, Any]],
+    skipped: List[Dict[str, Any]],
+) -> Dict[str, Any]:
     """Recompute global summary from sample-level merged records."""
 
     total = len(predictions)
     correct = sum(1 for record in predictions if record.get("correct"))
     summary = {
         "num_samples": total,
+        "num_evaluated": total,
+        "num_skipped": len(skipped),
+        "num_total_records": total + len(skipped),
         "accuracy": correct / max(total, 1),
         "avg_actual_keep_ratio": _avg(token_stats, "actual_keep_ratio"),
         "avg_ordinary_video_tokens_before": _avg(token_stats, "ordinary_video_tokens_before"),
@@ -135,28 +152,33 @@ def main() -> None:
     predictions: List[Dict[str, Any]] = []
     token_stats: List[Dict[str, Any]] = []
     timings: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
     source_args = []
 
     for run_dir in run_dirs:
         predictions.extend(_read_jsonl(run_dir / "predictions.jsonl"))
         token_stats.extend(_read_jsonl(run_dir / "token_stats.jsonl"))
         timings.extend(_read_jsonl(run_dir / "timings.jsonl"))
+        skipped.extend(_read_optional_jsonl(run_dir / "skipped.jsonl"))
         source_args.append({"run_dir": str(run_dir), "args": _load_args(run_dir)})
 
     if args.deduplicate:
         predictions = _deduplicate_by_sample_id(predictions)
         token_stats = _deduplicate_by_sample_id(token_stats)
         timings = _deduplicate_by_sample_id(timings)
+        skipped = _deduplicate_by_sample_id(skipped)
 
     _write_jsonl(output_dir / "predictions.jsonl", predictions)
     _write_jsonl(output_dir / "token_stats.jsonl", token_stats)
     _write_jsonl(output_dir / "timings.jsonl", timings)
-    summary = _write_summary(output_dir / "summary.json", predictions, token_stats, timings)
+    _write_jsonl(output_dir / "skipped.jsonl", skipped)
+    summary = _write_summary(output_dir / "summary.json", predictions, token_stats, timings, skipped)
 
     merged_args = {
         "merged_from": [str(run_dir) for run_dir in run_dirs],
         "source_args": source_args,
         "num_merged_predictions": len(predictions),
+        "num_merged_skipped": len(skipped),
         "deduplicate": bool(args.deduplicate),
     }
     (output_dir / "args.json").write_text(json.dumps(merged_args, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -166,6 +188,7 @@ def main() -> None:
 
     print(f"Merged output saved to: {output_dir}")
     print(f"Samples: {summary['num_samples']}")
+    print(f"Skipped samples: {summary['num_skipped']}")
     print(f"Accuracy: {summary['accuracy']:.4f}")
 
 

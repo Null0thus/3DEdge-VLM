@@ -16,3 +16,6 @@ docs/                     Notes about structure and commands.
 
 The pruning hook only receives pooled ordinary video tokens after `P` and
 spatial `Pool`. Text tokens and prompt tokens remain outside the pruning code.
+
+Each run writes `predictions.jsonl`, `token_stats.jsonl`, `timings.jsonl`,
+`skipped.jsonl`, `summary.json`, `args.json`, and optional heatmaps.

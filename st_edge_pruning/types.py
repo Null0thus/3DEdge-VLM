@@ -82,6 +82,7 @@ class RunPaths:
     predictions_file: Path
     token_stats_file: Path
     timings_file: Path
+    skipped_file: Path
     summary_file: Path
     args_file: Path
     heatmap_dir: Path

@@ -24,6 +24,7 @@ def build_run_paths(config: Dict[str, Any]) -> RunPaths:
         predictions_file=output_dir / "predictions.jsonl",
         token_stats_file=output_dir / "token_stats.jsonl",
         timings_file=output_dir / "timings.jsonl",
+        skipped_file=output_dir / "skipped.jsonl",
         summary_file=output_dir / "summary.json",
         args_file=output_dir / "args.json",
         heatmap_dir=heatmap_dir,

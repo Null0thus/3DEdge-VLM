@@ -1,0 +1,5 @@
+name: videomme
+root: datasets/Video-MME
+annotation_file: datasets/Video-MME/videomme/test-00000-of-00001.parquet
+video_dir: datasets/Video-MME/videos/data
+question_template: "Question: {question}\nOptions:\n{options}\nAnswer with the option letter."

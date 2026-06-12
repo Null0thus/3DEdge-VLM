@@ -41,10 +41,12 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--num-chunks", dest="num_chunks", type=int, default=d)
     parser.add_argument("--chunk-idx", dest="chunk_idx", type=int, default=d)
     parser.add_argument("--chunk-strategy", dest="chunk_strategy", choices=["contiguous", "round_robin"], default=d)
+    parser.add_argument("--missing-video-policy", dest="missing_video_policy", choices=["error", "skip"], default=d)
 
     parser.add_argument("--num-frames", dest="num_frames", type=int, default=d)
     parser.add_argument("--frame-sampling", dest="frame_sampling", choices=["uniform", "fps"], default=d)
     parser.add_argument("--video-fps", dest="video_fps", type=float, default=d)
+    parser.add_argument("--frame-dir-fps", dest="frame_dir_fps", type=float, default=d)
     parser.add_argument("--force-sample", dest="force_sample", type=_str_to_bool, default=d)
     parser.add_argument("--add-time-instruction", dest="add_time_instruction", type=_str_to_bool, default=d)
     parser.add_argument("--conv-mode", dest="conv_mode", default=d)

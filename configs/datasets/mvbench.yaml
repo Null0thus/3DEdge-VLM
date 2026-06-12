@@ -1,0 +1,6 @@
+name: mvbench
+root: datasets/MVBench
+annotation_dir: datasets/MVBench/json
+video_dir: datasets/MVBench/video
+tasks: all
+question_template: "Question: {question}\nOptions:\n{options}\nAnswer with the option letter or the exact option text."

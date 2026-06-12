@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from statistics import mean
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _avg(records: List[Dict[str, Any]], key: str):
@@ -11,13 +11,23 @@ def _avg(records: List[Dict[str, Any]], key: str):
     return mean(values) if values else None
 
 
-def write_summary(path: str | Path, predictions: List[Dict[str, Any]], token_stats: List[Dict[str, Any]], timings: List[Dict[str, Any]]) -> Dict[str, Any]:
+def write_summary(
+    path: str | Path,
+    predictions: List[Dict[str, Any]],
+    token_stats: List[Dict[str, Any]],
+    timings: List[Dict[str, Any]],
+    skipped: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Write aggregate metrics for one run."""
 
+    skipped = skipped or []
     total = len(predictions)
     correct = sum(1 for r in predictions if r.get("correct"))
     summary = {
         "num_samples": total,
+        "num_evaluated": total,
+        "num_skipped": len(skipped),
+        "num_total_records": total + len(skipped),
         "accuracy": correct / max(total, 1),
         "avg_actual_keep_ratio": _avg(token_stats, "actual_keep_ratio"),
         "avg_ordinary_video_tokens_before": _avg(token_stats, "ordinary_video_tokens_before"),

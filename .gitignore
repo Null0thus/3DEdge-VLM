@@ -1,10 +1,10 @@
-datasets/
-models/
-outputs/
-logs/
-checkpoints/
-heatmaps/
-tmp_flash/
+/datasets/
+/models/
+/outputs/
+/logs/
+/checkpoints/
+/heatmaps/
+/tmp_flash/
 
 *.pt
 *.pth
