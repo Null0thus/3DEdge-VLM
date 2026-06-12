@@ -1,0 +1,79 @@
+# Default experiment values. Command-line arguments override every value here.
+model_path: models/LLaVA-Video-7B-Qwen2-Video-Only
+llava_root: third_party/LLaVA-NeXT
+dataset: mvbench
+method: full
+output_dir: outputs
+run_name: null
+seed: 42
+device: cuda
+dtype: bfloat16
+num_workers: 0
+limit_samples: null
+num_chunks: 1
+chunk_idx: 0
+chunk_strategy: round_robin
+
+# Video loading and generation.
+num_frames: 16
+frame_sampling: uniform
+video_fps: 1
+force_sample: true
+add_time_instruction: true
+conv_mode: qwen_1_5
+max_new_tokens: 128
+temperature: 0.0
+top_p: 0.1
+num_beams: 1
+do_sample: false
+load_8bit: false
+load_4bit: false
+attn_implementation: flash_attention_2
+
+# LLaVA-Video visual pooling knobs.
+mm_spatial_pool_stride: 2
+mm_spatial_pool_mode: average
+mm_newline_position: grid
+mm_patch_merge_type: spatial_unpad
+
+# Shared pruning controls.
+keep_ratio: 1.0
+window_size: 4
+sampling_mode: topk
+topk_rounding: round
+min_keep_tokens: 1
+keep_at_least_one_per_frame: true
+
+# Ours: 3D spatio-temporal edge evidence controls.
+work_height: 224
+work_width: 224
+spatial_sigma: 0.8
+spatial_kernel_size: 5
+spatial_grad_kernel: sobel
+temporal_diff: center
+alpha_s: 0.8
+alpha_t: 0.7
+min_dyn_cc_size: 16
+min_sta_cc_size: 16
+beta_dyn: 1.0
+beta_sta: 0.5
+pi_min: 0.02
+pi_max: 0.98
+lambda_solver_iters: 40
+lambda_solver_tol: 1.0e-5
+importance_clip: 50.0
+
+# Heatmap output.
+save_heatmap: false
+heatmap_save_count: 20
+save_prob_npy: true
+save_prob_png: true
+save_overlay: true
+overlay_alpha: 0.45
+heatmap_colormap: jet
+
+# Metrics and runtime logging.
+measure_prefill_time: true
+measure_total_time: true
+measure_gpu_memory: true
+torch_cuda_sync: true
