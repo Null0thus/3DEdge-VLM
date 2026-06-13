@@ -80,42 +80,27 @@ anchor, and the remaining budget is filled by top-k difference scores:
 cd /data1/data2/csy/exam2
 EXP=mvbench_videollama3_ours_keep020_fps1_max180
 
-(
-  trap 'jobs -pr | xargs -r kill; wait; exit 130' INT TERM
-
-  for IDX in 0 1 2 3 4; do
-    GPU=$((IDX + 3))
-    SAVE_HEATMAP=false
-    if [ "$IDX" -eq 0 ]; then
-      SAVE_HEATMAP=true
-    fi
-    CUDA_VISIBLE_DEVICES=$GPU python scripts/run_eval.py \
-      --model-family videollama3 \
-      --model-path models/VideoLLaMA3-7B \
-      --dataset mvbench \
-      --method ours \
-      --keep-ratio 0.20 \
-      --sampling-mode bernoulli \
-      --window-size 8 \
-      --pi-min 0.0667 \
-      --pi-max 0.80 \
-      --num-frames 180 \
-      --frame-sampling fps \
-      --video-fps 1 \
-      --force-sample false \
-      --missing-video-policy skip \
-      --save-heatmap $SAVE_HEATMAP \
-      --heatmap-save-count 20 \
-      --num-chunks 5 \
-      --chunk-idx $IDX \
-      --chunk-strategy round_robin \
-      --output-dir outputs \
-      --experiment-name $EXP \
-      --run-name chunk$IDX &
-  done
-
-  wait
-)
+bash scripts/launch_chunked_eval.sh \
+  --gpus 3,4,5,6,7 \
+  --experiment-name $EXP \
+  --output-dir outputs \
+  --save-heatmap-first-chunk true \
+  --heatmap-save-count 20 \
+  -- \
+  --model-family videollama3 \
+  --model-path models/VideoLLaMA3-7B \
+  --dataset mvbench \
+  --method ours \
+  --keep-ratio 0.20 \
+  --sampling-mode bernoulli \
+  --window-size 8 \
+  --pi-min 0.0667 \
+  --pi-max 0.80 \
+  --num-frames 180 \
+  --frame-sampling fps \
+  --video-fps 1 \
+  --force-sample false \
+  --missing-video-policy skip
 ```
 
 Merge after all chunks finish:
