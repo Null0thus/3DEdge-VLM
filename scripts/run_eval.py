@@ -60,6 +60,8 @@ def _is_data_read_error(exc: Exception) -> bool:
     message = str(exc)
     if isinstance(exc, FileNotFoundError):
         return True
+    if isinstance(exc, ZeroDivisionError) and "division by zero" in message:
+        return True
     if isinstance(exc, RuntimeError) and "Error reading" in message:
         return True
     if "No image frames found" in message or "empty video or frame directory" in message:

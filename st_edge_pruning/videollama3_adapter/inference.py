@@ -9,6 +9,7 @@ from transformers import StoppingCriteria, StoppingCriteriaList
 from st_edge_pruning.generation import build_generation_kwargs
 from st_edge_pruning.metrics import cuda_sync, get_gpu_memory, is_correct, now
 from st_edge_pruning.types import EvalSample, PruneConfig
+from st_edge_pruning.video_io import load_video_frames
 
 
 class FirstTokenTimer(StoppingCriteria):
@@ -65,6 +66,31 @@ def _frames_to_hwc(frames: List[Any]) -> np.ndarray:
     return np.stack([_to_hwc_uint8(frame) for frame in frames], axis=0)
 
 
+def _frames_to_chw_list(frames: np.ndarray) -> List[np.ndarray]:
+    """Convert our HWC fallback frames to VideoLLaMA3's CHW frame convention."""
+
+    if frames.ndim != 4 or frames.shape[-1] != 3:
+        raise ValueError(f"Expected fallback frames in [T,H,W,3], got shape={frames.shape}")
+    return [np.transpose(frame, (2, 0, 1)) for frame in frames]
+
+
+def _parse_frame_time_string(frame_time: str, num_frames: int) -> List[float]:
+    """Parse timestamps returned by the shared decord/frame-directory loader."""
+
+    timestamps = []
+    for item in frame_time.split(","):
+        item = item.strip()
+        if item.endswith("s"):
+            item = item[:-1]
+        if item:
+            timestamps.append(float(item))
+    if len(timestamps) == num_frames:
+        return timestamps
+    # Keep the downstream processor alive even if a future frame_time format
+    # changes; these timestamps are only prompt metadata for VideoLLaMA3.
+    return [float(idx) for idx in range(num_frames)]
+
+
 def _format_official_mvbench_prompt(sample: EvalSample) -> str:
     """Build the prompt style used by VideoLLaMA3's MVBench evaluator."""
 
@@ -88,16 +114,37 @@ def _build_question(sample: EvalSample, config: Dict[str, Any]) -> str:
 def _load_video_with_processor(sample: EvalSample, processor, config: Dict[str, Any]) -> Tuple[List[Any], List[float], np.ndarray, float]:
     """Use VideoLLaMA3's loader so model frames and edge frames stay aligned."""
 
-    frames, timestamps = processor.load_video(
-        sample.video_path,
-        start_time=_metadata_float(sample, "start", "start_time"),
-        end_time=_metadata_float(sample, "end", "end_time"),
-        fps=float(config["video_fps"]) if config.get("frame_sampling") == "fps" else None,
-        max_frames=int(config["num_frames"]),
-    )
-    raw_frames = _frames_to_hwc(frames)
-    video_time = float(max(timestamps) if timestamps else 0.0)
-    return frames, [float(t) for t in timestamps], raw_frames, video_time
+    start_time = _metadata_float(sample, "start", "start_time")
+    end_time = _metadata_float(sample, "end", "end_time")
+    requested_fps = float(config["video_fps"]) if config.get("frame_sampling") == "fps" else None
+    try:
+        frames, timestamps = processor.load_video(
+            sample.video_path,
+            start_time=start_time,
+            end_time=end_time,
+            fps=requested_fps,
+            max_frames=int(config["num_frames"]),
+        )
+        raw_frames = _frames_to_hwc(frames)
+        video_time = float(max(timestamps) if timestamps else 0.0)
+        return frames, [float(t) for t in timestamps], raw_frames, video_time
+    except ZeroDivisionError:
+        # VideoLLaMA3's load_video_from_ids can compute segment_len=0 when a
+        # low-FPS video is sampled with a higher requested fps. Fall back to our
+        # guarded loader, which clamps the sampling step to at least one frame.
+        raw_frames, frame_time, video_time = load_video_frames(
+            sample.video_path,
+            num_frames=int(config["num_frames"]),
+            frame_sampling=str(config.get("frame_sampling", "uniform")),
+            video_fps=float(config.get("video_fps", 1.0)),
+            force_sample=bool(config.get("force_sample", True)),
+            start_time=start_time,
+            end_time=end_time,
+            frame_dir_fps=float(sample.metadata.get("frame_fps", config.get("frame_dir_fps", 3.0))),
+        )
+        frames = _frames_to_chw_list(raw_frames)
+        timestamps = _parse_frame_time_string(frame_time, len(frames))
+        return frames, timestamps, raw_frames, float(video_time)
 
 
 def _build_conversation(sample: EvalSample, frames: List[Any], timestamps: List[float], config: Dict[str, Any]):
