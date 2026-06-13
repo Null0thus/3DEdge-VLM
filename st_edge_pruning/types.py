@@ -88,5 +88,8 @@ class RunPaths:
     timings_file: Path
     skipped_file: Path
     summary_file: Path
+    summary_text_file: Path
     args_file: Path
     heatmap_dir: Path
+    logs_dir: Path
+    run_log_file: Path

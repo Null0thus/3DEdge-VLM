@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from st_edge_pruning.args import parse_eval_config, save_args_json
 from st_edge_pruning.datasets import build_dataset
-from st_edge_pruning.io import JsonlWriter, build_run_paths, write_summary
+from st_edge_pruning.io import JsonlWriter, build_run_paths, tee_output, write_summary
 from st_edge_pruning.llava_adapter.inference import run_one_sample
 from st_edge_pruning.llava_adapter.model_loader import load_llava_video_model
 from st_edge_pruning.visualization import save_probability_heatmaps
@@ -65,65 +65,69 @@ def main() -> None:
 
     config = parse_eval_config()
     run_paths = build_run_paths(config)
-    save_args_json(config, run_paths.args_file)
+    with tee_output(run_paths.run_log_file):
+        print(f"Logging to: {run_paths.run_log_file}")
+        save_args_json(config, run_paths.args_file)
 
-    tokenizer, model, image_processor, _ = load_llava_video_model(config)
-    model.eval()
+        tokenizer, model, image_processor, _ = load_llava_video_model(config)
+        model.eval()
 
-    samples = build_dataset(config)
-    samples = _chunk_samples(samples, int(config["num_chunks"]), int(config["chunk_idx"]), str(config.get("chunk_strategy", "round_robin")))
-    if config.get("limit_samples") is not None:
-        samples = samples[: int(config["limit_samples"])]
+        samples = build_dataset(config)
+        samples = _chunk_samples(samples, int(config["num_chunks"]), int(config["chunk_idx"]), str(config.get("chunk_strategy", "round_robin")))
+        if config.get("limit_samples") is not None:
+            samples = samples[: int(config["limit_samples"])]
 
-    predictions = []
-    token_stats = []
-    timings = []
-    skipped = []
-    heatmap_budget = int(config.get("heatmap_save_count", 0))
-    saved_heatmaps = 0
-    missing_video_policy = str(config.get("missing_video_policy", "skip"))
+        predictions = []
+        token_stats = []
+        timings = []
+        skipped = []
+        heatmap_budget = int(config.get("heatmap_save_count", 0))
+        saved_heatmaps = 0
+        missing_video_policy = str(config.get("missing_video_policy", "skip"))
 
-    with (
-        JsonlWriter(run_paths.predictions_file) as pred_writer,
-        JsonlWriter(run_paths.token_stats_file) as token_writer,
-        JsonlWriter(run_paths.timings_file) as timing_writer,
-        JsonlWriter(run_paths.skipped_file) as skipped_writer,
-    ):
-        for sample in tqdm(samples, desc="Evaluating"):
-            if missing_video_policy == "skip" and sample.metadata.get("video_missing"):
-                # Missing assets are logged and excluded from accuracy, instead
-                # of crashing every worker on the same incomplete dataset shard.
-                skip_record = _skipped_record(sample, "missing_media_path")
-                skipped.append(skip_record)
-                skipped_writer.write(skip_record)
-                continue
-
-            try:
-                result = run_one_sample(sample, tokenizer, model, image_processor, config)
-            except Exception as exc:
-                if missing_video_policy == "skip" and _is_data_read_error(exc):
-                    model.st_edge_pruning_context = None
-                    skip_record = _skipped_record(sample, "media_read_error", exc)
+        with (
+            JsonlWriter(run_paths.predictions_file) as pred_writer,
+            JsonlWriter(run_paths.token_stats_file) as token_writer,
+            JsonlWriter(run_paths.timings_file) as timing_writer,
+            JsonlWriter(run_paths.skipped_file) as skipped_writer,
+        ):
+            for sample in tqdm(samples, desc="Evaluating"):
+                if missing_video_policy == "skip" and sample.metadata.get("video_missing"):
+                    # Missing assets are logged and excluded from accuracy, instead
+                    # of crashing every worker on the same incomplete dataset shard.
+                    skip_record = _skipped_record(sample, "missing_media_path")
                     skipped.append(skip_record)
                     skipped_writer.write(skip_record)
                     continue
-                raise
 
-            predictions.append(result["prediction"])
-            token_stats.append(result["token_stats"])
-            timings.append(result["timings"])
-            pred_writer.write(result["prediction"])
-            token_writer.write(result["token_stats"])
-            timing_writer.write(result["timings"])
+                try:
+                    result = run_one_sample(sample, tokenizer, model, image_processor, config)
+                except Exception as exc:
+                    if missing_video_policy == "skip" and _is_data_read_error(exc):
+                        model.st_edge_pruning_context = None
+                        skip_record = _skipped_record(sample, "media_read_error", exc)
+                        skipped.append(skip_record)
+                        skipped_writer.write(skip_record)
+                        continue
+                    raise
 
-            if config.get("save_heatmap", False) and saved_heatmaps < heatmap_budget:
-                save_probability_heatmaps(result["keep_probs"], result["frames"], sample.sample_id, run_paths.output_dir, config)
-                saved_heatmaps += 1
+                predictions.append(result["prediction"])
+                token_stats.append(result["token_stats"])
+                timings.append(result["timings"])
+                pred_writer.write(result["prediction"])
+                token_writer.write(result["token_stats"])
+                timing_writer.write(result["timings"])
 
-    summary = write_summary(run_paths.summary_file, predictions, token_stats, timings, skipped)
-    print(f"Results saved to: {run_paths.output_dir}")
-    print(f"Accuracy: {summary['accuracy']:.4f}")
-    print(f"Skipped samples: {summary['num_skipped']}")
+                if config.get("save_heatmap", False) and saved_heatmaps < heatmap_budget:
+                    save_probability_heatmaps(result["keep_probs"], result["frames"], sample.sample_id, run_paths.output_dir, config)
+                    saved_heatmaps += 1
+
+        summary = write_summary(run_paths.summary_file, predictions, token_stats, timings, skipped)
+        print(f"Results saved to: {run_paths.output_dir}")
+        print(f"Summary text: {run_paths.summary_text_file}")
+        print(f"Accuracy: {summary['accuracy']:.4f}")
+        print(f"Correct: {summary['num_correct']} / {summary['num_evaluated']}")
+        print(f"Skipped samples: {summary['num_skipped']}")
 
 
 if __name__ == "__main__":

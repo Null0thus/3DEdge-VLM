@@ -11,6 +11,47 @@ def _avg(records: List[Dict[str, Any]], key: str):
     return mean(values) if values else None
 
 
+def _fmt(value: Any, digits: int = 4) -> str:
+    """Format optional numeric values for the human-readable summary."""
+
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
+def _summary_text(summary: Dict[str, Any]) -> str:
+    """Render the key metrics as a compact text report."""
+
+    accuracy = summary.get("accuracy")
+    accuracy_pct = None if accuracy is None else accuracy * 100.0
+    lines = [
+        "Experiment Summary",
+        "==================",
+        f"Evaluated samples: {summary.get('num_evaluated', 0)}",
+        f"Skipped samples: {summary.get('num_skipped', 0)}",
+        f"Total records: {summary.get('num_total_records', 0)}",
+        f"Correct: {summary.get('num_correct', 0)} / {summary.get('num_evaluated', 0)}",
+        f"Accuracy: {_fmt(accuracy, 6)} ({_fmt(accuracy_pct, 2)}%)",
+        "",
+        "Token Statistics",
+        "----------------",
+        f"Average actual keep ratio: {_fmt(summary.get('avg_actual_keep_ratio'), 6)}",
+        f"Average ordinary video tokens before: {_fmt(summary.get('avg_ordinary_video_tokens_before'), 2)}",
+        f"Average ordinary video tokens after: {_fmt(summary.get('avg_ordinary_video_tokens_after'), 2)}",
+        f"Average LLM visual tokens before: {_fmt(summary.get('avg_llm_visual_tokens_before'), 2)}",
+        f"Average LLM visual tokens after: {_fmt(summary.get('avg_llm_visual_tokens_after'), 2)}",
+        "",
+        "Runtime",
+        "-------",
+        f"Average total inference time sec: {_fmt(summary.get('avg_total_inference_time_sec'), 4)}",
+        f"Average LLM prefill time sec: {_fmt(summary.get('avg_llm_prefill_time_sec'), 4)}",
+        f"Max GPU memory peak MiB: {_fmt(summary.get('max_gpu_memory_peak_mib'), 2)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def write_summary(
     path: str | Path,
     predictions: List[Dict[str, Any]],
@@ -26,6 +67,7 @@ def write_summary(
     summary = {
         "num_samples": total,
         "num_evaluated": total,
+        "num_correct": correct,
         "num_skipped": len(skipped),
         "num_total_records": total + len(skipped),
         "accuracy": correct / max(total, 1),
@@ -38,5 +80,7 @@ def write_summary(
         "avg_llm_prefill_time_sec": _avg(timings, "llm_prefill_time_sec"),
         "max_gpu_memory_peak_mib": max([r.get("gpu_memory_peak_mib") or 0 for r in timings], default=None),
     }
-    Path(path).write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    path = Path(path)
+    path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.with_suffix(".txt").write_text(_summary_text(summary), encoding="utf-8")
     return summary

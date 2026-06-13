@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, Iterator, List, TextIO
 
 
 def _str_to_bool(value: str | bool) -> bool:
@@ -64,6 +66,38 @@ def _write_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
             file.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+class _TeeStream:
+    """Mirror merge output to both the terminal and merge.log."""
+
+    def __init__(self, terminal: TextIO, log_file: TextIO):
+        self.terminal = terminal
+        self.log_file = log_file
+
+    def write(self, text: str) -> int:
+        self.terminal.write(text)
+        self.log_file.write(text)
+        return len(text)
+
+    def flush(self) -> None:
+        self.terminal.flush()
+        self.log_file.flush()
+
+    def __getattr__(self, name: str):
+        """Forward terminal attributes such as isatty() and encoding."""
+
+        return getattr(self.terminal, name)
+
+
+@contextmanager
+def _tee_output(log_path: Path) -> Iterator[None]:
+    """Capture stdout and stderr in the merged experiment directory."""
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("w", encoding="utf-8") as log_file:
+        with redirect_stdout(_TeeStream(sys.stdout, log_file)), redirect_stderr(_TeeStream(sys.stderr, log_file)):
+            yield
+
+
 def _deduplicate_by_sample_id(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Keep the first record for each sample_id."""
 
@@ -87,6 +121,47 @@ def _avg(records: List[Dict[str, Any]], key: str):
     return sum(values) / len(values)
 
 
+def _fmt(value: Any, digits: int = 4) -> str:
+    """Format optional numeric values for summary.txt."""
+
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.{digits}f}"
+    return str(value)
+
+
+def _summary_text(summary: Dict[str, Any]) -> str:
+    """Create a compact text summary for direct inspection."""
+
+    accuracy = summary.get("accuracy")
+    accuracy_pct = None if accuracy is None else accuracy * 100.0
+    lines = [
+        "Experiment Summary",
+        "==================",
+        f"Evaluated samples: {summary.get('num_evaluated', 0)}",
+        f"Skipped samples: {summary.get('num_skipped', 0)}",
+        f"Total records: {summary.get('num_total_records', 0)}",
+        f"Correct: {summary.get('num_correct', 0)} / {summary.get('num_evaluated', 0)}",
+        f"Accuracy: {_fmt(accuracy, 6)} ({_fmt(accuracy_pct, 2)}%)",
+        "",
+        "Token Statistics",
+        "----------------",
+        f"Average actual keep ratio: {_fmt(summary.get('avg_actual_keep_ratio'), 6)}",
+        f"Average ordinary video tokens before: {_fmt(summary.get('avg_ordinary_video_tokens_before'), 2)}",
+        f"Average ordinary video tokens after: {_fmt(summary.get('avg_ordinary_video_tokens_after'), 2)}",
+        f"Average LLM visual tokens before: {_fmt(summary.get('avg_llm_visual_tokens_before'), 2)}",
+        f"Average LLM visual tokens after: {_fmt(summary.get('avg_llm_visual_tokens_after'), 2)}",
+        "",
+        "Runtime",
+        "-------",
+        f"Average total inference time sec: {_fmt(summary.get('avg_total_inference_time_sec'), 4)}",
+        f"Average LLM prefill time sec: {_fmt(summary.get('avg_llm_prefill_time_sec'), 4)}",
+        f"Max GPU memory peak MiB: {_fmt(summary.get('max_gpu_memory_peak_mib'), 2)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _write_summary(
     path: Path,
     predictions: List[Dict[str, Any]],
@@ -101,6 +176,7 @@ def _write_summary(
     summary = {
         "num_samples": total,
         "num_evaluated": total,
+        "num_correct": correct,
         "num_skipped": len(skipped),
         "num_total_records": total + len(skipped),
         "accuracy": correct / max(total, 1),
@@ -114,6 +190,7 @@ def _write_summary(
         "max_gpu_memory_peak_mib": max([record.get("gpu_memory_peak_mib") or 0 for record in timings], default=None),
     }
     path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.with_suffix(".txt").write_text(_summary_text(summary), encoding="utf-8")
     return summary
 
 
@@ -123,7 +200,8 @@ def _load_args(run_dir: Path) -> Dict[str, Any]:
     args_file = run_dir / "args.json"
     if not args_file.exists():
         return {}
-    return json.loads(args_file.read_text(encoding="utf-8"))
+    # utf-8-sig is tolerant of BOM files produced by some shell tools.
+    return json.loads(args_file.read_text(encoding="utf-8-sig"))
 
 
 def _copy_heatmaps(run_dirs: List[Path], output_dir: Path, heatmap_source: str | None) -> None:
@@ -141,55 +219,72 @@ def _copy_heatmaps(run_dirs: List[Path], output_dir: Path, heatmap_source: str |
     shutil.copytree(source, target)
 
 
+def _copy_chunk_logs(run_dirs: List[Path], output_dir: Path) -> None:
+    """Collect each chunk run.log under the merged logs/chunks directory."""
+
+    target = output_dir / "logs" / "chunks"
+    target.mkdir(parents=True, exist_ok=True)
+    for index, run_dir in enumerate(run_dirs):
+        source = run_dir / "logs" / "run.log"
+        if source.exists():
+            shutil.copy2(source, target / f"chunk{index}_run.log")
+
+
 def main() -> None:
     """Merge chunk outputs into one run directory."""
 
     args = parse_args()
     output_dir = Path(args.output_dir)
-    run_dirs = [Path(run_dir) for run_dir in args.run_dirs]
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    predictions: List[Dict[str, Any]] = []
-    token_stats: List[Dict[str, Any]] = []
-    timings: List[Dict[str, Any]] = []
-    skipped: List[Dict[str, Any]] = []
-    source_args = []
+    with _tee_output(output_dir / "logs" / "merge.log"):
+        run_dirs = [Path(run_dir) for run_dir in args.run_dirs]
+        print(f"Logging to: {output_dir / 'logs' / 'merge.log'}")
 
-    for run_dir in run_dirs:
-        predictions.extend(_read_jsonl(run_dir / "predictions.jsonl"))
-        token_stats.extend(_read_jsonl(run_dir / "token_stats.jsonl"))
-        timings.extend(_read_jsonl(run_dir / "timings.jsonl"))
-        skipped.extend(_read_optional_jsonl(run_dir / "skipped.jsonl"))
-        source_args.append({"run_dir": str(run_dir), "args": _load_args(run_dir)})
+        predictions: List[Dict[str, Any]] = []
+        token_stats: List[Dict[str, Any]] = []
+        timings: List[Dict[str, Any]] = []
+        skipped: List[Dict[str, Any]] = []
+        source_args = []
 
-    if args.deduplicate:
-        predictions = _deduplicate_by_sample_id(predictions)
-        token_stats = _deduplicate_by_sample_id(token_stats)
-        timings = _deduplicate_by_sample_id(timings)
-        skipped = _deduplicate_by_sample_id(skipped)
+        for run_dir in run_dirs:
+            predictions.extend(_read_jsonl(run_dir / "predictions.jsonl"))
+            token_stats.extend(_read_jsonl(run_dir / "token_stats.jsonl"))
+            timings.extend(_read_jsonl(run_dir / "timings.jsonl"))
+            skipped.extend(_read_optional_jsonl(run_dir / "skipped.jsonl"))
+            source_args.append({"run_dir": str(run_dir), "args": _load_args(run_dir)})
 
-    _write_jsonl(output_dir / "predictions.jsonl", predictions)
-    _write_jsonl(output_dir / "token_stats.jsonl", token_stats)
-    _write_jsonl(output_dir / "timings.jsonl", timings)
-    _write_jsonl(output_dir / "skipped.jsonl", skipped)
-    summary = _write_summary(output_dir / "summary.json", predictions, token_stats, timings, skipped)
+        if args.deduplicate:
+            predictions = _deduplicate_by_sample_id(predictions)
+            token_stats = _deduplicate_by_sample_id(token_stats)
+            timings = _deduplicate_by_sample_id(timings)
+            skipped = _deduplicate_by_sample_id(skipped)
 
-    merged_args = {
-        "merged_from": [str(run_dir) for run_dir in run_dirs],
-        "source_args": source_args,
-        "num_merged_predictions": len(predictions),
-        "num_merged_skipped": len(skipped),
-        "deduplicate": bool(args.deduplicate),
-    }
-    (output_dir / "args.json").write_text(json.dumps(merged_args, indent=2, ensure_ascii=False), encoding="utf-8")
+        _write_jsonl(output_dir / "predictions.jsonl", predictions)
+        _write_jsonl(output_dir / "token_stats.jsonl", token_stats)
+        _write_jsonl(output_dir / "timings.jsonl", timings)
+        _write_jsonl(output_dir / "skipped.jsonl", skipped)
+        summary = _write_summary(output_dir / "summary.json", predictions, token_stats, timings, skipped)
 
-    if args.copy_heatmaps:
-        _copy_heatmaps(run_dirs, output_dir, args.heatmap_source)
+        merged_args = {
+            "merged_from": [str(run_dir) for run_dir in run_dirs],
+            "source_args": source_args,
+            "num_merged_predictions": len(predictions),
+            "num_merged_skipped": len(skipped),
+            "deduplicate": bool(args.deduplicate),
+        }
+        (output_dir / "args.json").write_text(json.dumps(merged_args, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"Merged output saved to: {output_dir}")
-    print(f"Samples: {summary['num_samples']}")
-    print(f"Skipped samples: {summary['num_skipped']}")
-    print(f"Accuracy: {summary['accuracy']:.4f}")
+        _copy_chunk_logs(run_dirs, output_dir)
+        if args.copy_heatmaps:
+            _copy_heatmaps(run_dirs, output_dir, args.heatmap_source)
+
+        print(f"Merged output saved to: {output_dir}")
+        print(f"Summary text: {output_dir / 'summary.txt'}")
+        print(f"Samples: {summary['num_samples']}")
+        print(f"Correct: {summary['num_correct']} / {summary['num_evaluated']}")
+        print(f"Skipped samples: {summary['num_skipped']}")
+        print(f"Accuracy: {summary['accuracy']:.4f}")
 
 
 if __name__ == "__main__":

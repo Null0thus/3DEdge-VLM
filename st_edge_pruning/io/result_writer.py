@@ -22,8 +22,10 @@ def build_run_paths(config: Dict[str, Any]) -> RunPaths:
         base_dir = base_dir / str(config["experiment_name"])
     output_dir = base_dir / run_name
     heatmap_dir = output_dir / "heatmaps"
+    logs_dir = output_dir / "logs"
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
     return RunPaths(
         output_dir=output_dir,
         predictions_file=output_dir / "predictions.jsonl",
@@ -31,8 +33,11 @@ def build_run_paths(config: Dict[str, Any]) -> RunPaths:
         timings_file=output_dir / "timings.jsonl",
         skipped_file=output_dir / "skipped.jsonl",
         summary_file=output_dir / "summary.json",
+        summary_text_file=output_dir / "summary.txt",
         args_file=output_dir / "args.json",
         heatmap_dir=heatmap_dir,
+        logs_dir=logs_dir,
+        run_log_file=logs_dir / "run.log",
     )
 
 
