@@ -10,7 +10,9 @@ files under `models/VideoLLaMA3-7B`.
 Use `--method` to select the compression policy:
 
 - `full`: keep every VideoLLaMA3 visual token.
-- `difffp`: use native VideoLLaMA3 Differential Frame Pruning.
+- `difffp`: use VideoLLaMA3 Differential Frame Pruning. It supports
+  `--videollama3-difffp-selection threshold` for the native threshold rule and
+  `--videollama3-difffp-selection topk` for a fixed-budget top-k variant.
 - `random`: random pruning on the same post-merge video token grid.
 - `ours`: 3D spatio-temporal edge evidence pruning on the same post-merge grid.
 
@@ -32,7 +34,6 @@ Startup logs print the loaded model class and source file. Check
 
 ```bash
 cd /data1/data2/csy/exam2
-export PYTHONPATH=$PWD:${PYTHONPATH:-}
 
 CUDA_VISIBLE_DEVICES=0 python scripts/run_eval.py \
   --model-family videollama3 \
@@ -49,11 +50,34 @@ CUDA_VISIBLE_DEVICES=0 python scripts/run_eval.py \
   --run-name chunk0
 ```
 
+## DiffFP Selection Modes
+
+Native DiffFP keeps tokens whose adjacent-frame difference is above a fixed
+threshold. Its actual keep ratio is data-dependent:
+
+```bash
+--method difffp \
+--videollama3-difffp-selection threshold \
+--videollama3-difffp-threshold 0.1 \
+--videollama3-difffp-min-tokens 1
+```
+
+The top-k variant uses the same adjacent-frame difference score, but fixes the
+token budget with `--keep-ratio`. The first frame is kept as the native visual
+anchor, and the remaining budget is filled by top-k difference scores:
+
+```bash
+--method difffp \
+--videollama3-difffp-selection topk \
+--keep-ratio 0.20 \
+--topk-rounding round \
+--videollama3-difffp-min-tokens 1
+```
+
 ## Five-GPU Full MVBench Example
 
 ```bash
 cd /data1/data2/csy/exam2
-export PYTHONPATH=$PWD:${PYTHONPATH:-}
 EXP=mvbench_videollama3_ours_keep020_fps1_max180
 
 (

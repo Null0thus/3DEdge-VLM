@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import types
 from typing import Any, Dict, List, Optional, Tuple
+import math
 
 import numpy as np
 import torch
@@ -146,6 +147,105 @@ def _native_difffp_mask(
     )
 
 
+def _target_count(num_items: int, keep_ratio: float, rounding: str, min_keep: int) -> int:
+    """Compute a bounded top-k budget for one VideoLLaMA3 video item."""
+
+    raw = num_items * keep_ratio
+    if rounding == "floor":
+        count = math.floor(raw)
+    elif rounding == "ceil":
+        count = math.ceil(raw)
+    else:
+        count = round(raw)
+    return max(int(min_keep), min(num_items, int(count)))
+
+
+def _difffp_pixel_diff_grid(
+    images: torch.Tensor,
+    grid_size: torch.Tensor,
+    merge_size: torch.Tensor,
+    threshold: float,
+) -> torch.Tensor:
+    """Return native DiffFP adjacent-frame scores on the post-merge token grid."""
+
+    t_size, hp, wp = _video_grid_hw(grid_size, merge_size)
+    images = images.view(t_size, hp * wp, -1)
+    pixel_diff = torch.abs(images[1:] - images[:-1]).mean(dim=-1) * 255
+    # Native DiffFP has no previous frame for t=0, so it forces the first frame
+    # above threshold. We keep the same score convention for threshold mode.
+    first_frame_scores = torch.full_like(pixel_diff[0:1], float(threshold) + 1.0)
+    return torch.cat([first_frame_scores, pixel_diff], dim=0)
+
+
+def _difffp_topk_mask_for_video(
+    images: torch.Tensor,
+    grid_size: torch.Tensor,
+    merge_size: torch.Tensor,
+    config: PruneConfig,
+    threshold: float,
+    min_tokens: int,
+) -> torch.Tensor:
+    """Select DiffFP tokens by top-k adjacent-frame difference under a budget."""
+
+    score_grid = _difffp_pixel_diff_grid(images, grid_size, merge_size, threshold)
+    t_size, tokens_per_frame = int(score_grid.shape[0]), int(score_grid.shape[1])
+    total_tokens = t_size * tokens_per_frame
+    mask = torch.zeros_like(score_grid, dtype=torch.bool)
+
+    # The first frame is a visual anchor in native DiffFP because it has no
+    # previous frame. Preserving it keeps this top-k variant comparable to the
+    # original algorithm while making the remaining budget deterministic.
+    mask[0] = True
+    frame_floor = max(int(min_tokens), 0)
+    if frame_floor > 0 and t_size > 1:
+        per_frame_k = min(frame_floor, tokens_per_frame)
+        frame_topk = torch.topk(score_grid[1:], k=per_frame_k, dim=1, largest=True).indices
+        frame_rows = torch.arange(1, t_size, device=score_grid.device).unsqueeze(1)
+        mask[frame_rows, frame_topk] = True
+
+    target = _target_count(total_tokens, float(config.keep_ratio), config.topk_rounding, config.min_keep_tokens)
+    # Hard constraints from first-frame and per-frame floors can make the real
+    # keep ratio slightly higher than the requested budget; stats record this.
+    target = min(total_tokens, max(target, int(mask.sum().item())))
+    remaining = target - int(mask.sum().item())
+    if remaining > 0:
+        flat_scores = score_grid.flatten()
+        flat_mask = mask.flatten()
+        candidate_scores = flat_scores.masked_fill(flat_mask, -torch.inf)
+        chosen = torch.topk(candidate_scores, k=remaining, largest=True).indices
+        flat_mask[chosen] = True
+    return mask
+
+
+def _difffp_topk_mask(
+    pixel_values: torch.Tensor,
+    batched_num_patches: torch.Tensor,
+    grid_sizes: torch.Tensor,
+    merge_sizes: torch.Tensor,
+    modals: List[str],
+    config: PruneConfig,
+    threshold: float,
+    min_tokens: int,
+) -> torch.Tensor:
+    """Build a full VideoLLaMA3 compression mask with fixed-budget DiffFP top-k."""
+
+    batched_images = pixel_values.split(grid_sizes.prod(dim=1).tolist(), dim=0)
+    masks = []
+    for images, num_patches, grid_size, merge_size, modal in zip(
+        batched_images, batched_num_patches, grid_sizes, merge_sizes, modals
+    ):
+        if modal == "text":
+            masks.append(torch.ones((0,), dtype=torch.bool, device=pixel_values.device))
+        elif modal == "image" or _as_int(grid_size[0]) == 1:
+            masks.append(torch.ones((_as_int(num_patches),), dtype=torch.bool, device=pixel_values.device))
+        elif modal == "video":
+            item_mask = _difffp_topk_mask_for_video(images, grid_size, merge_size, config, threshold, min_tokens)
+            masks.append(item_mask.flatten())
+        else:
+            masks.append(torch.ones((0,), dtype=torch.bool, device=pixel_values.device))
+    return torch.cat(masks) if masks else torch.ones((0,), dtype=torch.bool, device=pixel_values.device)
+
+
 def _all_keep_mask(batched_num_patches: torch.Tensor, modals: List[str], device: torch.device) -> torch.Tensor:
     """Keep all visual tokens while preserving VideoLLaMA3 text pseudo-items."""
 
@@ -197,20 +297,35 @@ def _patched_get_compression_mask(
         prune_config = PruneConfig.from_mapping(config_dict)
 
     method = str(config_dict.get("method", prune_config.method))
+    difffp_selection = str(config_dict.get("videollama3_difffp_selection", "threshold"))
     difffp_threshold = float(config_dict.get("videollama3_difffp_threshold", threshold))
     difffp_min_tokens = int(config_dict.get("videollama3_difffp_min_tokens", min_tokens))
 
     if method == "difffp":
-        mask = _native_difffp_mask(
-            self,
-            pixel_values,
-            batched_num_patches,
-            grid_sizes,
-            merge_sizes,
-            modals,
-            difffp_threshold,
-            difffp_min_tokens,
-        )
+        if difffp_selection == "threshold":
+            mask = _native_difffp_mask(
+                self,
+                pixel_values,
+                batched_num_patches,
+                grid_sizes,
+                merge_sizes,
+                modals,
+                difffp_threshold,
+                difffp_min_tokens,
+            )
+        elif difffp_selection == "topk":
+            mask = _difffp_topk_mask(
+                pixel_values,
+                batched_num_patches,
+                grid_sizes,
+                merge_sizes,
+                modals,
+                prune_config,
+                difffp_threshold,
+                difffp_min_tokens,
+            )
+        else:
+            raise ValueError(f"Unsupported VideoLLaMA3 DiffFP selection mode: {difffp_selection}")
     elif method == "full":
         mask = _all_keep_mask(batched_num_patches, modals, pixel_values.device)
     elif method in {"random", "ours"}:
@@ -265,8 +380,10 @@ def _patched_get_compression_mask(
             extra = {}
             if method == "difffp":
                 extra = {
+                    "videollama3_difffp_selection": difffp_selection,
                     "videollama3_difffp_threshold": difffp_threshold,
                     "videollama3_difffp_min_tokens": difffp_min_tokens,
+                    "target_keep_ratio": float(prune_config.keep_ratio),
                 }
             _record_result(context, item_index, keep_probs, keep_mask, method, extra)
             offset += count

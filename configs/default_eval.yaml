@@ -39,6 +39,7 @@ attn_implementation: flash_attention_2
 # instance instead of editing files under models/.
 videollama3_backend: hf_local
 videollama3_max_visual_tokens: null
+videollama3_difffp_selection: threshold
 videollama3_difffp_threshold: 0.1
 videollama3_difffp_min_tokens: 1
 videollama3_prompt_style: official_mvbench

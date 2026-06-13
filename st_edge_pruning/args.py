@@ -63,6 +63,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
 
     parser.add_argument("--videollama3-backend", dest="videollama3_backend", choices=["hf_local"], default=d)
     parser.add_argument("--videollama3-max-visual-tokens", dest="videollama3_max_visual_tokens", type=int, default=d)
+    parser.add_argument("--videollama3-difffp-selection", dest="videollama3_difffp_selection", choices=["threshold", "topk"], default=d)
     parser.add_argument("--videollama3-difffp-threshold", dest="videollama3_difffp_threshold", type=float, default=d)
     parser.add_argument("--videollama3-difffp-min-tokens", dest="videollama3_difffp_min_tokens", type=int, default=d)
     parser.add_argument("--videollama3-prompt-style", dest="videollama3_prompt_style", choices=["official_mvbench", "dataset"], default=d)
@@ -141,6 +142,9 @@ def _validate_eval_config(config: Dict[str, Any]) -> None:
         raise ValueError("--method difffp is only valid with --model-family videollama3")
     if method == "evs" and model_family == "videollama3":
         raise ValueError("--method evs is not implemented for --model-family videollama3")
+    difffp_min_tokens = config.get("videollama3_difffp_min_tokens", 1)
+    if difffp_min_tokens is not None and int(difffp_min_tokens) < 0:
+        raise ValueError("--videollama3-difffp-min-tokens must be non-negative")
 
     if model_family == "videollama3":
         if str(config.get("videollama3_backend", "hf_local")) == "hf_local" and not Path(model_path).exists():
