@@ -16,6 +16,9 @@ docs/                     Notes about structure and commands.
 
 The pruning hook only receives pooled ordinary video tokens after `P` and
 spatial `Pool`. Text tokens and prompt tokens remain outside the pruning code.
+`--position-encoding sequential` keeps the original LLaVA behavior after
+pruning. `--position-encoding preserve` gathers retained embeddings together
+with their original multimodal position ids before pruning.
 
 Each run writes `predictions.jsonl`, `token_stats.jsonl`, `timings.jsonl`,
 `skipped.jsonl`, `summary.json`, `args.json`, and optional heatmaps.

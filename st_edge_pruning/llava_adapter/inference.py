@@ -149,6 +149,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
             "text_tokens": text_tokens,
             "total_input_tokens_before": text_tokens + int(token_stats.get("llm_visual_tokens_before", 0)),
             "total_input_tokens_after": text_tokens + int(token_stats.get("llm_visual_tokens_after", 0)),
+            "position_encoding": str(config.get("position_encoding", "sequential")),
         }
     )
     timings = {
@@ -170,6 +171,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
         "prediction": prediction,
         "correct": is_correct(prediction, sample.answer, sample.choices),
         "method": config["method"],
+        "position_encoding": str(config.get("position_encoding", "sequential")),
         "target_keep_ratio": float(config["keep_ratio"]),
         "actual_keep_ratio": token_stats.get("actual_keep_ratio"),
         "window_size": int(config["window_size"]),

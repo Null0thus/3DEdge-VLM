@@ -68,6 +68,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--keep-ratio", dest="keep_ratio", type=float, default=d)
     parser.add_argument("--window-size", dest="window_size", type=int, default=d)
     parser.add_argument("--sampling-mode", dest="sampling_mode", choices=["bernoulli", "topk"], default=d)
+    parser.add_argument("--position-encoding", dest="position_encoding", choices=["sequential", "preserve"], default=d)
     parser.add_argument("--topk-rounding", dest="topk_rounding", choices=["floor", "round", "ceil"], default=d)
     parser.add_argument("--min-keep-tokens", dest="min_keep_tokens", type=int, default=d)
     parser.add_argument("--keep-at-least-one-per-frame", dest="keep_at_least_one_per_frame", type=_str_to_bool, default=d)

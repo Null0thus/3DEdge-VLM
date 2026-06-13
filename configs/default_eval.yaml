@@ -43,6 +43,7 @@ mm_patch_merge_type: spatial_unpad
 keep_ratio: 1.0
 window_size: 4
 sampling_mode: topk
+position_encoding: sequential
 topk_rounding: round
 min_keep_tokens: 1
 keep_at_least_one_per_frame: true

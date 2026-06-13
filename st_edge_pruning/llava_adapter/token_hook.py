@@ -39,11 +39,25 @@ def _record_result(context: Optional[Dict[str, Any]], image_index: int, result: 
     result.stats["llm_visual_tokens_before"] = int(llm_before)
     result.stats["llm_visual_tokens_after"] = int(llm_after)
     result.stats["llm_visual_keep_ratio"] = float(llm_after / max(llm_before, 1))
+    result.stats["position_encoding"] = str(context.get("config", {}).get("position_encoding", "sequential"))
     context.setdefault("results", {})[image_index] = {
         "keep_probs": result.keep_probs.detach().cpu(),
         "keep_mask": result.keep_mask.detach().cpu(),
         "stats": result.stats,
     }
+
+
+def _record_sequence_mask(context: Optional[Dict[str, Any]], image_index: int, seq_mask: torch.Tensor, newline_position: str) -> None:
+    """Expose original visual sequence positions for position-preserving mode."""
+
+    if context is None:
+        return
+    # seq_mask is defined over the unpruned visual sequence after LLaVA newline
+    # insertion. Position-preserving encoding gathers position ids with the same
+    # mask after text/video features are interleaved.
+    context.setdefault("visual_sequence_masks", {})[image_index] = seq_mask.detach().cpu()
+    context.setdefault("visual_sequence_lengths", {})[image_index] = int(seq_mask.numel())
+    context.setdefault("visual_newline_positions", {})[image_index] = newline_position
 
 
 def _ordinary_flat_mask(keep_mask: torch.Tensor) -> torch.Tensor:
@@ -133,5 +147,6 @@ def maybe_prune_video_tokens(
     result = method_fn(pooled_video_features, frames, config, context=context)
     seq_mask = _build_sequence_mask(result.keep_mask, sequence_features.shape[0], newline_position, sequence_features.device)
     pruned_sequence = sequence_features[seq_mask]
+    _record_sequence_mask(context, image_index, seq_mask, newline_position)
     _record_result(context, image_index, result, sequence_features.shape[0], pruned_sequence.shape[0])
     return pruned_sequence

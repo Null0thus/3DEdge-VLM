@@ -33,6 +33,7 @@ class PruneConfig:
     keep_ratio: float = 1.0
     window_size: int = 4
     sampling_mode: str = "topk"
+    position_encoding: str = "sequential"
     topk_rounding: str = "round"
     min_keep_tokens: int = 1
     keep_at_least_one_per_frame: bool = True
