@@ -15,7 +15,12 @@ def build_run_paths(config: Dict[str, Any]) -> RunPaths:
     if not run_name:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_name = f"{stamp}_{config['dataset']}_{config['method']}_keep{float(config['keep_ratio']):.2f}".replace(".", "")
-    output_dir = Path(config["output_dir"]) / run_name
+    # experiment_name groups related chunks/merged outputs under one folder,
+    # e.g. outputs/mvbench_ours_keep025/chunk0 instead of many loose folders.
+    base_dir = Path(config["output_dir"])
+    if config.get("experiment_name"):
+        base_dir = base_dir / str(config["experiment_name"])
+    output_dir = base_dir / run_name
     heatmap_dir = output_dir / "heatmaps"
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_dir.mkdir(parents=True, exist_ok=True)

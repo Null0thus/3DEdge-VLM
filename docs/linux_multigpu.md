@@ -4,6 +4,10 @@ Run one chunk per GPU for data-parallel evaluation. Example for physical GPUs
 3, 4, 5, 6, and 7. The command group installs a trap so `Ctrl+C` stops all
 background chunk processes together.
 
+For cleaner output layout, pass the same `--experiment-name` to all chunks and
+use short `--run-name` values such as `chunk0`; outputs then live under one
+folder like `outputs/<experiment-name>/chunk0` and `outputs/<experiment-name>/merged`.
+
 ```bash
 cd /data1/data2/csy/exam2
 mkdir -p logs

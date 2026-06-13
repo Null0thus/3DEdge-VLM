@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 from typing import Optional
 
@@ -21,14 +22,30 @@ def _target_count(num_items: int, keep_ratio: float, rounding: str, min_keep: in
     return max(min_keep, min(num_items, int(count)))
 
 
-def sample_keep_mask(keep_probs: torch.Tensor, config: PruneConfig, scores: Optional[torch.Tensor] = None) -> torch.Tensor:
+def stable_sample_seed(base_seed: int, sample_key: Optional[str]) -> int:
+    """Create a reproducible per-sample seed for stochastic pruning."""
+
+    if not sample_key:
+        return int(base_seed)
+    digest = hashlib.sha256(f"{base_seed}:{sample_key}".encode("utf-8")).hexdigest()
+    # torch.Generator.manual_seed accepts 64-bit seeds. Keeping 63 bits avoids
+    # signed/unsigned surprises across CPU and CUDA generator backends.
+    return int(digest[:16], 16) & ((1 << 63) - 1)
+
+
+def sample_keep_mask(
+    keep_probs: torch.Tensor,
+    config: PruneConfig,
+    scores: Optional[torch.Tensor] = None,
+    sample_seed: Optional[int] = None,
+) -> torch.Tensor:
     """Sample or select ordinary video tokens from keep probabilities."""
 
     if config.keep_ratio >= 1.0:
         return torch.ones_like(keep_probs, dtype=torch.bool)
 
     generator = torch.Generator(device=keep_probs.device)
-    generator.manual_seed(int(config.seed))
+    generator.manual_seed(int(config.seed if sample_seed is None else sample_seed))
     if config.sampling_mode == "bernoulli":
         mask = torch.rand(keep_probs.shape, generator=generator, device=keep_probs.device) < keep_probs
     elif config.sampling_mode == "topk":

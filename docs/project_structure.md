@@ -19,3 +19,6 @@ spatial `Pool`. Text tokens and prompt tokens remain outside the pruning code.
 
 Each run writes `predictions.jsonl`, `token_stats.jsonl`, `timings.jsonl`,
 `skipped.jsonl`, `summary.json`, `args.json`, and optional heatmaps.
+
+Use `--experiment-name NAME` with chunk runs to group related outputs under
+`outputs/NAME/`, for example `outputs/NAME/chunk0` and `outputs/NAME/merged`.

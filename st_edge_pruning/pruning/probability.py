@@ -59,9 +59,16 @@ def normalize_probs_by_window(scores: torch.Tensor, config: PruneConfig) -> torc
     for start in range(0, num_frames, window_size):
         end = min(start + window_size, num_frames)
         window_scores = flat_scores[start:end].flatten().clamp_min(1.0e-12)
+        # Window-wise scaling preserves all relative importance values but keeps
+        # lambda search numerically well-conditioned when importance=exp(logit)
+        # becomes very large. Without this, exp(50) can require far more than
+        # the default binary-search iterations and overestimates keep_ratio.
+        scale = window_scores.max().clamp_min(1.0e-12)
+        window_scores = window_scores / scale
         target_sum = config.keep_ratio * window_scores.numel()
         lam = _solve_lambda(window_scores, target_sum, config.pi_min, config.pi_max, config.lambda_solver_iters, config.lambda_solver_tol)
-        flat_probs[start:end] = torch.clamp(lam * flat_scores[start:end], config.pi_min, config.pi_max)
+        scaled_scores = flat_scores[start:end].clamp_min(1.0e-12) / scale
+        flat_probs[start:end] = torch.clamp(lam * scaled_scores, config.pi_min, config.pi_max)
     return probs
 
 

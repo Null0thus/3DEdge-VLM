@@ -32,6 +32,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--dataset", default=d)
     parser.add_argument("--method", choices=["full", "random", "ours"], default=d)
     parser.add_argument("--output-dir", dest="output_dir", default=d)
+    parser.add_argument("--experiment-name", dest="experiment_name", default=d)
     parser.add_argument("--run-name", dest="run_name", default=d)
     parser.add_argument("--seed", type=int, default=d)
     parser.add_argument("--device", default=d)
