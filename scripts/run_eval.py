@@ -1,17 +1,41 @@
 from __future__ import annotations
 
 import math
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
 from tqdm import tqdm
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    # Allow `python scripts/run_eval.py` from the project root on Linux servers
+    # without requiring the user to export PYTHONPATH manually.
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from st_edge_pruning.args import parse_eval_config, save_args_json
 from st_edge_pruning.datasets import build_dataset
 from st_edge_pruning.io import JsonlWriter, build_run_paths, tee_output, write_summary
-from st_edge_pruning.llava_adapter.inference import run_one_sample
-from st_edge_pruning.llava_adapter.model_loader import load_llava_video_model
 from st_edge_pruning.visualization import save_probability_heatmaps
+
+
+def _load_model_and_runner(config: Dict[str, Any]):
+    """Select the model adapter without importing unused third-party code."""
+
+    model_family = str(config.get("model_family", "llava_video"))
+    if model_family == "llava_video":
+        from st_edge_pruning.llava_adapter.inference import run_one_sample
+        from st_edge_pruning.llava_adapter.model_loader import load_llava_video_model
+
+        tokenizer, model, processor, context_len = load_llava_video_model(config)
+        return tokenizer, model, processor, context_len, run_one_sample
+    if model_family == "videollama3":
+        from st_edge_pruning.videollama3_adapter.inference import run_one_sample
+        from st_edge_pruning.videollama3_adapter.model_loader import load_videollama3_model
+
+        tokenizer, model, processor, context_len = load_videollama3_model(config)
+        return tokenizer, model, processor, context_len, run_one_sample
+    raise ValueError(f"Unsupported model_family: {model_family}")
 
 
 def _chunk_samples(samples, num_chunks: int, chunk_idx: int, chunk_strategy: str):
@@ -61,7 +85,7 @@ def _skipped_record(sample, reason: str, exc: Exception | None = None) -> Dict[s
 
 
 def main() -> None:
-    """Run Full/Random/Ours evaluation on the selected dataset."""
+    """Run one configured evaluation job on the selected model family."""
 
     config = parse_eval_config()
     run_paths = build_run_paths(config)
@@ -69,7 +93,7 @@ def main() -> None:
         print(f"Logging to: {run_paths.run_log_file}")
         save_args_json(config, run_paths.args_file)
 
-        tokenizer, model, image_processor, _ = load_llava_video_model(config)
+        tokenizer, model, image_processor, _, run_one_sample = _load_model_and_runner(config)
         model.eval()
 
         samples = build_dataset(config)

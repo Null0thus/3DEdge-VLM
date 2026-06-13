@@ -150,6 +150,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
             "total_input_tokens_before": text_tokens + int(token_stats.get("llm_visual_tokens_before", 0)),
             "total_input_tokens_after": text_tokens + int(token_stats.get("llm_visual_tokens_after", 0)),
             "position_encoding": str(config.get("position_encoding", "sequential")),
+            "num_sampled_frames": int(frames.shape[0]),
         }
     )
     timings = {

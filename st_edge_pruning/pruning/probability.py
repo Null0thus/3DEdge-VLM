@@ -72,10 +72,18 @@ def normalize_probs_by_window(scores: torch.Tensor, config: PruneConfig) -> torc
     return probs
 
 
-def compute_ours_probabilities(video_features: torch.Tensor, evidence: dict, config: PruneConfig) -> Tuple[torch.Tensor, torch.Tensor]:
+def compute_ours_probabilities(
+    video_features: torch.Tensor,
+    evidence: dict,
+    config: PruneConfig,
+    token_grid_hw: Tuple[int, int] | None = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """Compute Pi_t for each pooled ordinary video token."""
 
-    grid_hw = infer_token_grid(video_features)
+    # LLaVA pooled tokens are square, so the old path infers H_p x W_p. Models
+    # such as VideoLLaMA3 use any-resolution grids, so adapters may pass the
+    # exact post-merge grid explicitly.
+    grid_hw = token_grid_hw or infer_token_grid(video_features)
     e_dyn = map_evidence_to_token_grid(evidence["gamma_dyn"], grid_hw)
     e_sta = map_evidence_to_token_grid(evidence["gamma_sta"], grid_hw)
     importance = compute_importance(e_dyn, e_sta, config)

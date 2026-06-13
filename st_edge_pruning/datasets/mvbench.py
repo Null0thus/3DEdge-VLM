@@ -149,6 +149,7 @@ def load_mvbench(config: Dict[str, Any]) -> List[EvalSample]:
             resolved = _resolve_mvbench_path(video_dir, task_name, video_name, video_index)
             question = template.format(question=record["question"], options=_format_options(choices))
             metadata = {
+                "raw_question": record["question"],
                 "raw_video": video_name,
                 "resolved_video": str(resolved["path"]),
                 "path_status": resolved["path_status"],
