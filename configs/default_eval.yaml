@@ -67,6 +67,11 @@ lambda_solver_iters: 40
 lambda_solver_tol: 1.0e-5
 importance_clip: 50.0
 
+# EVS plug-and-play baseline controls.
+evs_space: embedding
+evs_metric: cosine
+evs_anchor_first_frame: true
+
 # Heatmap output.
 save_heatmap: false
 heatmap_save_count: 20

@@ -54,6 +54,9 @@ class PruneConfig:
     lambda_solver_iters: int = 40
     lambda_solver_tol: float = 1.0e-5
     importance_clip: float = 50.0
+    evs_space: str = "embedding"
+    evs_metric: str = "cosine"
+    evs_anchor_first_frame: bool = True
     seed: int = 42
 
     @classmethod

@@ -19,6 +19,8 @@ spatial `Pool`. Text tokens and prompt tokens remain outside the pruning code.
 `--position-encoding sequential` keeps the original LLaVA behavior after
 pruning. `--position-encoding preserve` gathers retained embeddings together
 with their original multimodal position ids before pruning.
+Method implementations live in `st_edge_pruning/methods/`: Full, Random, Ours,
+and the plug-and-play EVS embedding-similarity baseline.
 
 Each run writes `predictions.jsonl`, `token_stats.jsonl`, `timings.jsonl`,
 `skipped.jsonl`, `summary.json`, `args.json`, and optional heatmaps.

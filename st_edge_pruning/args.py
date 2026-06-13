@@ -30,7 +30,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--model-path", dest="model_path", default=d)
     parser.add_argument("--llava-root", dest="llava_root", default=d)
     parser.add_argument("--dataset", default=d)
-    parser.add_argument("--method", choices=["full", "random", "ours"], default=d)
+    parser.add_argument("--method", choices=["full", "random", "ours", "evs"], default=d)
     parser.add_argument("--output-dir", dest="output_dir", default=d)
     parser.add_argument("--experiment-name", dest="experiment_name", default=d)
     parser.add_argument("--run-name", dest="run_name", default=d)
@@ -90,6 +90,9 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--lambda-solver-iters", dest="lambda_solver_iters", type=int, default=d)
     parser.add_argument("--lambda-solver-tol", dest="lambda_solver_tol", type=float, default=d)
     parser.add_argument("--importance-clip", dest="importance_clip", type=float, default=d)
+    parser.add_argument("--evs-space", dest="evs_space", choices=["embedding"], default=d)
+    parser.add_argument("--evs-metric", dest="evs_metric", choices=["cosine", "l2"], default=d)
+    parser.add_argument("--evs-anchor-first-frame", dest="evs_anchor_first_frame", type=_str_to_bool, default=d)
 
     parser.add_argument("--save-heatmap", dest="save_heatmap", type=_str_to_bool, default=d)
     parser.add_argument("--heatmap-save-count", dest="heatmap_save_count", type=int, default=d)

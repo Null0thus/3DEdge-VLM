@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 import torch
 
-from st_edge_pruning.methods import apply_full, apply_ours, apply_random
+from st_edge_pruning.methods import apply_evs, apply_full, apply_ours, apply_random
 from st_edge_pruning.types import PruneConfig, PruneResult
 
 
@@ -15,6 +15,8 @@ def _select_result_method(method: str):
         return apply_full
     if method == "random":
         return apply_random
+    if method == "evs":
+        return apply_evs
     if method == "ours":
         return apply_ours
     raise ValueError(f"Unsupported pruning method: {method}")
