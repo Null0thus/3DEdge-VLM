@@ -55,6 +55,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser, default_none: bool) -
     parser.add_argument("--max-new-tokens", dest="max_new_tokens", type=int, default=d)
     parser.add_argument("--temperature", type=float, default=d)
     parser.add_argument("--top-p", dest="top_p", type=float, default=d)
+    parser.add_argument("--top-k", dest="top_k", type=int, default=d)
     parser.add_argument("--num-beams", dest="num_beams", type=int, default=d)
     parser.add_argument("--do-sample", dest="do_sample", type=_str_to_bool, default=d)
     parser.add_argument("--load-8bit", dest="load_8bit", type=_str_to_bool, default=d)

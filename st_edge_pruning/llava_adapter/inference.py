@@ -5,6 +5,7 @@ from typing import Any, Dict
 import torch
 from transformers import StoppingCriteria, StoppingCriteriaList
 
+from st_edge_pruning.generation import build_generation_kwargs
 from st_edge_pruning.metrics import cuda_sync, get_gpu_memory, is_correct, now
 from st_edge_pruning.types import EvalSample, PruneConfig
 from st_edge_pruning.video_io import load_video_frames
@@ -128,12 +129,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
             images=video,
             attention_mask=attention_mask,
             modalities="video",
-            do_sample=bool(config["do_sample"]),
-            temperature=float(config["temperature"]),
-            top_p=float(config["top_p"]),
-            num_beams=int(config["num_beams"]),
-            max_new_tokens=int(config["max_new_tokens"]),
-            use_cache=True,
+            **build_generation_kwargs(config),
             stopping_criteria=stopping,
         )
     cuda_sync(bool(config.get("torch_cuda_sync", True)))

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from transformers import StoppingCriteria, StoppingCriteriaList
 
+from st_edge_pruning.generation import build_generation_kwargs
 from st_edge_pruning.metrics import cuda_sync, get_gpu_memory, is_correct, now
 from st_edge_pruning.types import EvalSample, PruneConfig
 
@@ -173,12 +174,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, processor, config: Dict
         with torch.inference_mode():
             output_ids = model.generate(
                 **inputs,
-                do_sample=bool(config["do_sample"]),
-                temperature=float(config["temperature"]),
-                top_p=float(config["top_p"]),
-                num_beams=int(config["num_beams"]),
-                max_new_tokens=int(config["max_new_tokens"]),
-                use_cache=True,
+                **build_generation_kwargs(config),
                 stopping_criteria=stopping,
                 pad_token_id=tokenizer.eos_token_id,
             )
