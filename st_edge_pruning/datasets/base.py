@@ -17,4 +17,12 @@ def build_dataset(config: Dict[str, Any]) -> List[EvalSample]:
         from .videomme import load_videomme
 
         return load_videomme(config)
+    if name in {"nextqa", "next-qa", "next_qa"}:
+        from .nextqa import load_nextqa
+
+        return load_nextqa(config)
+    if name in {"tempcompass", "temp-compass", "temp_compass"}:
+        from .tempcompass import load_tempcompass
+
+        return load_tempcompass(config)
     raise ValueError(f"Unsupported dataset: {name}")

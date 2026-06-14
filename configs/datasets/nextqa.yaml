@@ -1,0 +1,5 @@
+name: nextqa
+root: datasets/NExT-QA
+annotation_file: datasets/NExT-QA/MC/test-00000-of-00001.parquet
+video_dir: datasets/NExT-QA/NExTVideo
+question_template: "Question: {question}\nOptions:\n{options}\nAnswer with the option letter."
