@@ -161,6 +161,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, image_processor, config
         "sample_id": sample.sample_id,
         "dataset": sample.dataset,
         "task": sample.task,
+        "question_format": sample.metadata.get("question_format"),
         "video_path": sample.video_path,
         "question": sample.question,
         "choices": sample.choices,

@@ -258,6 +258,7 @@ def run_one_sample(sample: EvalSample, tokenizer, model, processor, config: Dict
         "sample_id": sample.sample_id,
         "dataset": sample.dataset,
         "task": sample.task,
+        "question_format": sample.metadata.get("question_format"),
         "video_path": sample.video_path,
         "question": _build_question(sample, config),
         "choices": sample.choices,

@@ -1,5 +1,7 @@
 name: tempcompass
 root: datasets/TempCompass
 annotation_file: datasets/TempCompass/multi-choice/test-00000-of-00001.parquet
+caption_matching_file: datasets/TempCompass/caption_matching/test-00000-of-00001.parquet
 video_dir: datasets/TempCompass/videos
+include_caption_matching: true
 question_template: "Question: {question}\nOptions:\n{options}\nAnswer with the option letter."
